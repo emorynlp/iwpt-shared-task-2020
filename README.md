@@ -12,7 +12,11 @@ It requires Python 3.6 or later.
 
 ## Data preprocessing
 
-See 
+See [data](https://github.com/emorynlp/iwpt-shared-task-2020/tree/master/data/iwpt2020).
+
+## Training and decoding
+
+
 
 ## Citing
 

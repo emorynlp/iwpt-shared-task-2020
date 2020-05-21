@@ -9,7 +9,8 @@ import numpy as np
 from edparser.components.parsers.parse_alg import adjust_root_score_then_add_secondary_arcs, mst_then_greedy
 
 from edparser.components.parsers.conll import CoNLLSentence, CoNLLUWord
-from edparser.metrics.parsing.iwpt20_eval import evaluate, remove_complete_edges, restore_collapse_edges, conllu_quick_fix
+from edparser.metrics.parsing.iwpt20_eval import evaluate, remove_complete_edges, restore_collapse_edges, \
+    conllu_quick_fix
 
 from edparser.components.parsers.biaffine_parser import BiaffineTransformerDependencyParser, \
     BiaffineTransformerSemanticDependencyParser
@@ -41,6 +42,13 @@ def combine(folders, file, out):
 
 
 def run(lang, do_train=True, do_eval=True, mbert=True):
+    """
+    Run training and decoding
+    :param lang: Language code, 2 letters.
+    :param do_train: Train model or not.
+    :param do_eval: Evaluate performance (generating output) or not.
+    :param mbert: Use mbert or language specific transformers.
+    """
     dataset = f'data/iwpt2020/train-dev-combined/{lang}'
     trnfile = f'{dataset}/train.short.conllu'
     # for idx, sent in enumerate(read_conll(trnfile)):
@@ -290,15 +298,15 @@ def sdp_to_dag(parser, scores, output_path, long_sent, dep_dev_output=None):
 def main():
     cdroot()
     fs = sorted(glob.glob('data/iwpt2020/test-blind/*.txt'))
-    total = load_json('data/model/iwpt2020/dev.json')
+    # total = load_json('data/model/iwpt2020/dev.json')
     for idx, txt in enumerate(fs):
         basename = os.path.basename(txt)
         langcode = basename.split('.')[0]
         print(f'{idx + 1:02d}/{len(fs)} {basename}')
         # if idx + 1 < 13:
         #     continue
-        if langcode != 'ar':
-            continue
+        # if langcode != 'ar':
+        #     continue
         # if langcode in total:
         #     continue
         # run(langcode, do_train=True, mbert=False, do_eval=False)
