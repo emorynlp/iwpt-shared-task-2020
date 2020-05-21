@@ -16,7 +16,7 @@ See [data](https://github.com/emorynlp/iwpt-shared-task-2020/tree/master/data/iw
 
 ## Training and decoding
 
-
+See https://github.com/emorynlp/iwpt-shared-task-2020/blob/master/iwpt2020/all_in_one.py#L44 .
 
 ## Citing
 
