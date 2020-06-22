@@ -6,7 +6,7 @@ import glob
 import os
 
 from edparser.components.parsers.conll import read_conll
-from edparser.layers.transformers import AutoTokenizer, AutoConfig
+from edparser.layers.transformers.tf_imports import AutoTokenizer, AutoConfig
 from edparser.layers.transformers.utils import config_is, convert_examples_to_features
 from edparser.utils.io_util import save_json
 from iwpt2020 import cdroot
@@ -48,18 +48,25 @@ def sent_str(sent: list):
 
 def main():
     cdroot()
-    # trainfiles = sorted(x for x in glob.glob('data/iwpt2020/train-dev-combined/**/dev.conllu') if 'short' not in x)
-    trainfiles = sorted(x for x in glob.glob('data/iwpt2020/test-udpipe/*.fixed.conllu') if 'short' not in x)
+    files = sorted(x for x in glob.glob('data/iwpt2020/train-dev-combined/**/train.conllu') if 'short' not in x)
+    shorten(files)
+    files = sorted(x for x in glob.glob('data/iwpt2020/train-dev-combined/**/dev.conllu') if 'short' not in x)
+    shorten(files)
+    files = sorted(x for x in glob.glob('data/iwpt2020/test-udpipe/*.fixed.conllu') if 'short' not in x)
+    shorten(files)
+
+
+def shorten(files):
     pretrained = 'bert-base-multilingual-cased'
     tokenizer = AutoTokenizer.from_pretrained(pretrained)
     config = AutoConfig.from_pretrained(pretrained)
-    for idx, f in enumerate(trainfiles):
+    for idx, f in enumerate(files):
         langcode = f.split('/')[-2]
         if len(langcode) != 2:
             langcode = os.path.basename(f).split('.')[0]
-        if langcode != 'en':
-            continue
-        print(f'{idx + 1:02d}/{len(trainfiles)} {langcode}')
+        # if langcode != 'en':
+        #     continue
+        print(f'{idx + 1:02d}/{len(files)} {langcode}')
         with open(f.replace('.conllu', '.short.conllu'), 'w') as out:
             long_sent = {}
             oid = 0
