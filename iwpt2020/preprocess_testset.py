@@ -23,8 +23,10 @@ def parse(text, lang='en'):
 
 
 def main():
+    print('Preprocess blind test data with UDPipe ...')
     cdroot()
     files = glob.glob('data/iwpt2020/test-blind/*.txt')
+    os.makedirs('data/iwpt2020/test-udpipe', exist_ok=True)
     for idx, txt in enumerate(files):
         basename = os.path.basename(txt)
         print(f'{idx + 1}/{len(files)} {basename}')

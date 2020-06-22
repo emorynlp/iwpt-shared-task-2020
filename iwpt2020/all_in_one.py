@@ -89,7 +89,7 @@ def run(lang, do_train=True, do_eval=True, mbert=True):
     # if do_train and os.path.isdir(save_dir):
     #     return
     parser = BiaffineTransformerDependencyParser()
-    if do_train and not os.path.isdir(save_dir):
+    if do_train:
         parser.fit(trnfile,
                    devfile,
                    save_dir,
@@ -310,7 +310,7 @@ def main():
         # if langcode in total:
         #     continue
         # run(langcode, do_train=True, mbert=False, do_eval=False)
-        run(langcode, do_train=False, mbert=True, do_eval=True)
+        run(langcode, do_train=True, mbert=True, do_eval=True)
 
 
 if __name__ == '__main__':

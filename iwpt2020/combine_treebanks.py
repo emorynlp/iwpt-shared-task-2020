@@ -31,6 +31,7 @@ def combine(folders, file, out):
 
 
 def main():
+    print('Combing treebanks of the same language ...')
     cdroot()
     ISO639_1 = {
         'ab': 'Abkhaz',

@@ -47,6 +47,7 @@ def sent_str(sent: list):
 
 
 def main():
+    print('Shortening sentences according to the number of subtokens ...')
     cdroot()
     files = sorted(x for x in glob.glob('data/iwpt2020/train-dev-combined/**/train.conllu') if 'short' not in x)
     shorten(files)
