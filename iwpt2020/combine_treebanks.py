@@ -230,8 +230,8 @@ def main():
         print(f'{idx + 1:02d}/{len(testfiles)} {basename} {[os.path.basename(x) for x in fs]}')
         folder = f'data/iwpt2020/train-dev-combined/{langcode}'
         os.makedirs(folder, exist_ok=True)
-        # for part in ['train', 'dev']:
-        #     combine(fs, f'{part}.enhanced_collapse_empty_nodes.conllu', f'{folder}/{part}.conllu')
+        for part in ['train', 'dev']:
+            combine(fs, f'{part}.enhanced_collapse_empty_nodes.conllu', f'{folder}/{part}.conllu')
 
 
 if __name__ == '__main__':
