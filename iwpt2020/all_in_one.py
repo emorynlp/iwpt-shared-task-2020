@@ -3,9 +3,10 @@
 # Date: 2020-04-09 07:45
 
 import glob
-import os
+import os, sys
 from shutil import copyfile
 import numpy as np
+import tensorflow as tf
 from edparser.components.parsers.parse_alg import adjust_root_score_then_add_secondary_arcs, mst_then_greedy
 
 from edparser.components.parsers.conll import CoNLLSentence, CoNLLUWord
@@ -88,22 +89,25 @@ def run(lang, do_train=True, do_eval=True, mbert=True):
     save_dir = f'data/model/iwpt2020/{lang}/{prefix}_dep'
     # if do_train and os.path.isdir(save_dir):
     #     return
-    parser = BiaffineTransformerDependencyParser()
-    if do_train:
-        parser.fit(trnfile,
-                   devfile,
-                   save_dir,
-                   transformer,
-                   batch_size=4096,
-                   warmup_steps_ratio=.1,
-                   samples_per_batch=150,
-                   # max_samples_per_batch=75,
-                   transformer_dropout=.33,
-                   learning_rate=2e-3,
-                   learning_rate_transformer=1e-5,
-                   # max_seq_length=512,
-                   # epochs=1
-                   )
+    strategy = tf.distribute.MirroredStrategy()
+    print("Number of devices: {}".format(strategy.num_replicas_in_sync))
+    with strategy.scope():
+        parser = BiaffineTransformerDependencyParser(strategy=strategy)
+        if do_train:
+            parser.fit(trnfile,
+                       devfile,
+                       save_dir,
+                       transformer,
+                       batch_size=4096,
+                       warmup_steps_ratio=.1,
+                       samples_per_batch=150,
+                       # max_samples_per_batch=75,
+                       transformer_dropout=.33,
+                       learning_rate=2e-3,
+                       learning_rate_transformer=1e-5,
+                       # max_seq_length=512,
+                       # epochs=1
+                       )
     logger = init_logger(name='test', root_dir=save_dir, mode='w')
     parser.config.tree = 'mst'
     # dep_dev_output = f'{save_dir}/{os.path.basename(devfile.replace(".conllu", ".dep.pred.conllu"))}'
@@ -187,7 +191,7 @@ def run(lang, do_train=True, do_eval=True, mbert=True):
     folders = [dep_root, sdp_root, ens_root]
     for o, f in zip(outputs, folders):
         os.makedirs(f, exist_ok=True)
-        tmp = f'/home/hhe43/tmp/{lang}.conllu'
+        tmp = f'/tmp/{lang}.conllu'
         copyfile(o, tmp)
         remove_complete_edges(tmp, tmp)
         restore_collapse_edges(tmp, tmp)
@@ -310,7 +314,8 @@ def main():
         # if langcode in total:
         #     continue
         # run(langcode, do_train=True, mbert=False, do_eval=False)
-        run(langcode, do_train=True, mbert=True, do_eval=True)
+        do_train = len(sys.argv) == 1 or sys.argv[1] != 'predict'
+        run(langcode, do_train=do_train, mbert=False, do_eval=True)
 
 
 if __name__ == '__main__':

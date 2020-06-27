@@ -27,12 +27,14 @@ from edparser.utils.util import merge_locals_kwargs, DummyContext
 
 
 class BiaffineDependencyParser(KerasComponent):
-    def __init__(self, transform: CoNLL_DEP_Transform = None) -> None:
+    def __init__(self, transform: CoNLL_DEP_Transform = None,
+                 strategy=None) -> None:
         if not transform:
             transform = CoNLL_DEP_Transform()
         super().__init__(transform)
         self.transform: CoNLL_DEP_Transform = transform
         self.model: BiaffineModel = None
+        self.strategy = strategy
 
     def build_model(self, pretrained_embed, n_embed, training, **kwargs) -> tf.keras.Model:
         if training:
@@ -119,8 +121,19 @@ class BiaffineDependencyParser(KerasComponent):
                 for c in callbacks:
                     c.on_batch_begin(idx, logs)
                 mask = tf.not_equal(words, self.config.pad_index) & tf.not_equal(words, self.config.bos_index)
-                loss, arc_scores, rel_scores = self.train_batch(words, feats, arcs, rels, mask,
-                                                                optimizer, arc_loss, rel_loss)
+                if self.strategy:
+                    loss, arc_scores, rel_scores = self.strategy.experimental_run_v2(
+                        self.train_batch, args=(words, feats, arcs, rels, mask,
+                                                optimizer, arc_loss, rel_loss,))
+                    loss = self.strategy.reduce(tf.distribute.ReduceOp.SUM, loss,
+                                                axis=None)
+                    arc_scores = self.strategy.reduce(tf.distribute.ReduceOp.SUM, arc_scores,
+                                                axis=None)
+                    rel_scores = self.strategy.reduce(tf.distribute.ReduceOp.SUM, rel_scores,
+                                                axis=None)
+                else:
+                    loss, arc_scores, rel_scores = self.train_batch(words, feats, arcs, rels, mask,
+                                                                    optimizer, arc_loss, rel_loss)
                 self.run_metrics(arcs, rels, arc_scores, rel_scores, words, mask, metric)
                 logs['loss'] = loss
                 logs.update(metric.to_dict())
@@ -190,6 +203,11 @@ class BiaffineDependencyParser(KerasComponent):
         rel_scores = tf.gather_nd(rel_scores, tf.stack([tf.range(len(arcs), dtype=tf.int64), arcs], axis=1))
         arc_loss = arc_loss(arcs, arc_scores)
         rel_loss = rel_loss(rels, rel_scores)
+        if self.strategy:
+            GLOBAL_BATCH_SIZE = self.config.batch_size * self.strategy.num_replicas_in_sync
+            arc_loss = tf.reduce_sum(arc_loss) / GLOBAL_BATCH_SIZE
+            rel_loss = tf.reduce_sum(rel_loss) / GLOBAL_BATCH_SIZE
+
         loss = arc_loss + rel_loss
 
         return loss
@@ -210,13 +228,24 @@ class BiaffineDependencyParser(KerasComponent):
 
     # noinspection PyMethodOverriding
     def build_loss(self, arc_loss, rel_loss, **kwargs):
-        if arc_loss == 'binary_crossentropy':
-            arc_loss = tf.losses.BinaryCrossentropy(from_logits=True)
+        if self.strategy:               # Attardi
+            if arc_loss == 'binary_crossentropy':
+                arc_loss = tf.losses.BinaryCrossentropy(from_logits=True)
+            else:
+                arc_loss = tf.keras.losses.SparseCategoricalCrossentropy(
+                    from_logits=True,
+                    reduction=tf.keras.losses.Reduction.NONE) if arc_loss == 'sparse_categorical_crossentropy' else super().build_loss(arc_loss)
+            rel_loss = tf.keras.losses.SparseCategoricalCrossentropy(
+                from_logits=True,
+                reduction=tf.keras.losses.Reduction.NONE) if rel_loss == 'sparse_categorical_crossentropy' else super().build_loss(rel_loss)
         else:
-            arc_loss = tf.keras.losses.SparseCategoricalCrossentropy(
-                from_logits=True) if arc_loss == 'sparse_categorical_crossentropy' else super().build_loss(arc_loss)
-        rel_loss = tf.keras.losses.SparseCategoricalCrossentropy(
-            from_logits=True) if rel_loss == 'sparse_categorical_crossentropy' else super().build_loss(rel_loss)
+            if arc_loss == 'binary_crossentropy':
+                arc_loss = tf.losses.BinaryCrossentropy(from_logits=True)
+            else:
+                arc_loss = tf.keras.losses.SparseCategoricalCrossentropy(
+                    from_logits=True) if arc_loss == 'sparse_categorical_crossentropy' else super().build_loss(arc_loss)
+            rel_loss = tf.keras.losses.SparseCategoricalCrossentropy(
+                from_logits=True) if rel_loss == 'sparse_categorical_crossentropy' else super().build_loss(rel_loss)
         return arc_loss, rel_loss
 
     @property
@@ -387,10 +416,11 @@ class BiaffineSemanticDependencyParser(BiaffineDependencyParser):
 
 
 class BiaffineTransformerDependencyParser(BiaffineDependencyParser, tf.keras.callbacks.Callback):
-    def __init__(self, transform: CoNLL_Transformer_Transform = None) -> None:
+    def __init__(self, transform: CoNLL_Transformer_Transform = None,
+                 strategy=None) -> None:
         if not transform:
             transform = CoNLL_Transformer_Transform()
-        super().__init__(transform)
+        super().__init__(transform, strategy)
         self.transform: CoNLL_Transformer_Transform = transform
 
     def build_model(self, transformer, training, **kwargs) -> tf.keras.Model:
@@ -415,6 +445,10 @@ class BiaffineTransformerDependencyParser(BiaffineDependencyParser, tf.keras.cal
             elif 'chinese-roberta' in transformer:
                 tokenizer = BertTokenizer.from_pretrained(transformer)
                 transformer = TFBertModel.from_pretrained(transformer, name=transformer, from_pt=True)
+            elif 'electra' in transformer:
+                from transformers import TFElectraModel
+                tokenizer = BertTokenizer.from_pretrained(transformer)
+                transformer = TFElectraModel.from_pretrained(transformer, name=transformer, from_pt=True)
             else:
                 tokenizer: PreTrainedTokenizer = AutoTokenizer.from_pretrained(transformer)
                 try:
@@ -456,7 +490,8 @@ class BiaffineTransformerDependencyParser(BiaffineDependencyParser, tf.keras.cal
             epochs=100,
             tree=False, punct=False, token_mapping=None, run_eagerly=False, logger=None, verbose=True, **kwargs):
         self.set_params({})
-        return KerasComponent.fit(self, **merge_locals_kwargs(locals(), kwargs))
+        return KerasComponent.fit(self,
+                                  **merge_locals_kwargs(locals(), kwargs))
 
     @property
     def sample_data(self):
@@ -501,7 +536,8 @@ class BiaffineTransformerDependencyParser(BiaffineDependencyParser, tf.keras.cal
         return callbacks
 
     def on_train_begin(self):
-        self.params['accum_grads'] = [tf.Variable(tf.zeros_like(tv.read_value()), trainable=False) for tv in
+        self.params['accum_grads'] = [tf.Variable(tf.zeros_like(tv.read_value()), trainable=False,
+                                                  aggregation=tf.VariableAggregation.SUM) for tv in
                                       self.model.trainable_variables]
         self.params['trained_samples'] = 0
         self.params['transformer_variable_names'] = {x.name for x in self.model.transformer.trainable_variables}
@@ -511,6 +547,7 @@ class BiaffineTransformerDependencyParser(BiaffineDependencyParser, tf.keras.cal
             arc_scores, rel_scores = self.model((words, feats), training=True)
             loss = self.get_loss(arc_scores, rel_scores, arcs, rels, mask, arc_loss, rel_loss)
         grads = tape.gradient(loss, self.model.trainable_variables)
+        del tape
         accum_grads = self.params['accum_grads']
         for i, grad in enumerate(grads):
             if grad is not None:
@@ -623,8 +660,13 @@ class StructuralAttentionDependencyParser(BiaffineTransformerDependencyParser):
                 for c in callbacks:
                     c.on_batch_begin(idx, logs)
                 mask = tf.not_equal(words, self.config.pad_index) & tf.not_equal(words, self.config.bos_index)
-                loss, arc_scores, rel_scores, lm_ids = self.train_batch(words, feats, arcs, rels, offsets, mask,
-                                                                        optimizer, arc_loss, rel_loss, acc)
+                if self.srategy:
+                    with self.srategy.scope():
+                        loss, arc_scores, rel_scores, lm_ids = self.train_batch(words, feats, arcs, rels, offsets, mask,
+                                                                                optimizer, arc_loss, rel_loss, acc)
+                else:
+                    loss, arc_scores, rel_scores, lm_ids = self.train_batch(words, feats, arcs, rels, offsets, mask,
+                                                                            optimizer, arc_loss, rel_loss, acc)
                 self.run_metrics(arcs, rels, arc_scores, rel_scores, words, mask, metrics[0])
                 logs['loss'] = loss
                 logs.update(metrics[0].to_dict())

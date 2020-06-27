@@ -61,7 +61,7 @@ set_tf_loglevel()
 shut_up_python_logging()
 import tensorflow as tf
 
-nice_gpu()
+#nice_gpu()
 
 
 def size_of_dataset(dataset: tf.data.Dataset) -> int:
