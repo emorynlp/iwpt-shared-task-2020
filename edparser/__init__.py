@@ -27,7 +27,7 @@ import edparser.utils
 from edparser.version import __version__
 
 set_gpu_memory_growth()
-set_gpu()
+#set_gpu()
 ls_resource_in_module(edparser.pretrained)
 
 
